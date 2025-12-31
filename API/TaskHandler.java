@@ -1,8 +1,9 @@
 package API;
 import API.Models.Task;
+import API.Exception.ExceptionHandler;
 
-import java.util.ArrayList;
-import java.util.List;
+
+import org.xml.sax.ErrorHandler;
 
 import com.sun.net.httpserver.HttpHandler;
 
@@ -12,12 +13,16 @@ import com.sun.net.httpserver.HttpExchange;
 import java.net.URI;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 public class TaskHandler implements HttpHandler {
 
     TaskStorage store;
     String[] relationalOperators = new String[]{"!=","="};
     String[] taskAttributes = new String[]{"id", "name", "desc", "status", "priority"};
+    
     public TaskHandler(TaskStorage store){
         this.store = store;
     }
@@ -44,9 +49,10 @@ public class TaskHandler implements HttpHandler {
                 // Method is not one of the afformentioned
                 break;
         }
+        //Already been handled by an exception
+        if(response == null) return;
 
         // Handle the request
-        response = "Hello, this is a simple HTTP server response!";
         exchange.sendResponseHeaders(200, response.length());
         OutputStream os = exchange.getResponseBody();
         os.write(response.getBytes());
@@ -66,74 +72,120 @@ public class TaskHandler implements HttpHandler {
         */
     }
 
-    String processGetReq(HttpExchange exchange){
+    String processGetReq(HttpExchange exchange) throws IOException{
         String path = exchange.getRequestURI().getPath();
+        //Split based on the / char to see if there is a specific id or name to be searched
         String[] split = path.split("/");
         String res = "";
-
-        //Getting all tasks
+        System.out.println(split.length);
+        for(int i = 0; i < split.length;i++){
+            System.out.println(split[i]);
+        }
+        //No specific task
         if(split.length==2){
-            res = store.findAll().toString();
+            //Split based on ? to see if there are conditions
+            String[] params = split[1].split("\\?");
+            System.out.println(params.length);
+            //No conditions, return all
+            if (params.length == 1) {
+                //Need to return as like a json, currently returning the object ID
+                System.out.println(store.findAll().toString());
+                return store.findAll().toString();
+            } 
 
-        } else {
-            String param = split[2];
+            //If there are, get them
+            String param = params[1];
             split = param.split("&");
-            //Getting a single task by id
-            if (split.length == 1){
-                Long id = Long.parseLong(split[2]);
-                res = store.findById(id).toString();
-            } else {
-                List<String[]> conditions = new ArrayList<>();
+            List<String[]> conditions = new ArrayList<>();
 
-                //Loop through all conditions
-                for (int j = 0; j < split.length; j++) {
-                    //Split them into parsed conditions
-                    boolean validCond = false;
-                    //find which condition it splits on
-                    for (int relationOperator = 0; relationOperator < relationalOperators.length; relationOperator++){
-                        
-                        String[] condSplit = split[j].split(relationalOperators[relationOperator]);
-                        if(condSplit.length == 1){
-                            continue;
-                        } else {
-                            validCond = true;
-                            //See if its a valid predicate on the left hand side
-                            boolean validPred = false;
-                            for (int p = 0; p < taskAttributes.length; p++){
-                                if(condSplit[0] == taskAttributes[p]){
-                                    validPred = true;
-                                    break;
-                                }
+            //Loop through all conditions
+            for (int j = 0; j < split.length; j++) {
+                //Split them into parsed conditions
+                boolean validCond = false;
+                //find which condition it splits on
+                for (int relationOperator = 0; relationOperator < relationalOperators.length; relationOperator++){
+                    
+                    String[] condSplit = split[j].split(relationalOperators[relationOperator]);
+                    if(condSplit.length == 1){
+                        continue;
+                    } else {
+                        validCond = false;
+                        //See if its a valid predicate on the left hand side
+                        boolean validPred = false;
+                        for (int p = 0; p < taskAttributes.length; p++){
+                            if(condSplit[0].equals(taskAttributes[p])){
+                                validPred = true;
+                                break;
                             }
-                            if (validPred == false){
-                                //Error
-                            }
-
-                            conditions.add(condSplit);
-                            break;
                         }
+                        //Handle exception if left hand side is not valid
+                        if (validPred == false){
+                            ExceptionHandler.RestException(exchange, 400);
+                            return null;
+                        }
+                        //Otherwise add condition and break
+                        conditions.add(condSplit);
+                        break;
                     }
-                    if(validCond == false){
-                        //Error
+                }
+                //If condition is invalid, aka did not find a valid operator in the valid, handle exception
+                if(validCond == false){
+                    ExceptionHandler.RestException(exchange, 400);
+                    return null;
+                }
+                
+            }
+            //Getting all tasks but filtering
+            List<Task> allTasks = store.findAll();
+            List<Task> filtered = new ArrayList<>();
+            for(int i = 0; i < allTasks.size(); i++){
+                Task task = allTasks.get(i);
+                boolean passes = true;
+                //Check against each condition
+                for (int j = 0; j < conditions.size(); j++) {
+                    String[] condition = conditions.get(j);
+                    String val = getTaskFieldValue(task, condition[0]);
+                    //No need to recheck null since prechecked
+                    boolean equal = val.equals(condition[2]);
+                    boolean oper = (condition[1]=="=");
+                    //XOR if they are equal and if the condition is =
+                    //Returns false if equal is true and oper is false
+                    //Or if equal is false and oper is true
+                    if (!(equal ^ oper)){
+                        passes = false;
+                        break;
                     }
                     
-                }
-                //Getting all tasks but filtering
-                List<Task> allTasks = store.findAll();
-                List<Task> filtered = new ArrayList<>();
-                for(int i = 0; i < allTasks.size(); i++){
-                    boolean passes = true;
-                    //Check against each condition
-                    for (int j = 0; j < conditions.size(); j++) {
-                        
-                    }
-                }
 
+                }
+                if(passes) filtered.add(task);
             }
             
+        } else if (split.length == 3){            
+            //Getting a single task by id
+            Long id = Long.parseLong(split[2]);
+            Optional<Task> task = store.findById(id);
+            if(!task.isPresent()){
+                ExceptionHandler.RestException(exchange, 204);
+
+            }
+            res = store.findById(id).toString();
+            
+        } else {
+            ExceptionHandler.RestException(exchange, 400);
         }
 
         return res;
+    }
+    private String getTaskFieldValue(Task task, String field) {
+        return switch (field) {
+            case "id" -> String.valueOf(task.getId());
+            case "name" -> task.getName();
+            case "desc" -> task.getDesc();
+            case "status" -> task.getStatus().name();
+            case "priority" -> task.getPriority().name();
+            default -> null;
+        };
     }
 
     String processPostReq(HttpExchange exchange){

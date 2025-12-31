@@ -25,7 +25,23 @@ public class Task {
 
     }
 
-    public Long GetId(){
+    public Long getId(){
         return id;
+    }
+
+    public String getName(){
+        return name;
+    }
+
+    public String getDesc(){
+        return desc;
+    }
+
+    public Status getStatus(){
+        return status;
+    }
+
+    public Priority getPriority(){
+        return priority;
     }
 }

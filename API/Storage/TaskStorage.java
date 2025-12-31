@@ -6,13 +6,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import API.Models.Priority;
+import API.Models.Status;
 import API.Models.Task;
 
 public class TaskStorage {
-    private final Map<Long, Task> store = new HashMap<>();
+    private final Map<Long, Task> store =  new HashMap<>();
 
     public void save(Task task) {
-        store.put(task.GetId(), task);
+        store.put(task.getId(), task);
     }
 
     public Optional<Task> findById(long id) {
@@ -20,6 +22,7 @@ public class TaskStorage {
     }
 
     public List<Task> findAll() {
+        store.put(1L, new Task(1L,"H","H", Priority.LOW));
         return new ArrayList<>(store.values());
     }
 
