@@ -219,16 +219,20 @@ public class TaskHandler implements HttpHandler {
     }
 
     Response processPostReq(HttpExchange exchange) throws IOException{
+        System.out.println("Post request");
         Map<String,String> body = extractBodyJSONMap(exchange);
+        
         if (body == null) return null;
 
         if(body.size() != 4) {
+            System.out.println("Incorrect body size");
             ExceptionHandler.RestException(exchange, 400);
             return null;
         }
         //Have to -1 to ignore ID
         for(int i = 0; i < taskAttributes.length-1;i++) {
             if(!body.containsKey(taskAttributes[i+1])) {
+                System.out.println("Post request body has invalid field");
                 ExceptionHandler.RestException(exchange, 400);
                 return null;
             }
@@ -241,6 +245,7 @@ public class TaskHandler implements HttpHandler {
             status = Status.valueOf(body.get("status"));
             priority = Priority.valueOf(body.get("priority"));
         } catch(Exception e) {
+            System.out.println("Priority Or Status section have invalid values");
             ExceptionHandler.RestException(exchange, 400);
             return null;
         }

@@ -23,11 +23,6 @@ public class TaskStorage {
     }
 
     public List<Task> findAll() {
-        store.put(1L, new Task(1L,"First","First", Priority.LOW, Status.TODO));
-        store.put(2L, new Task(2L,"Second","Second", Priority.MEDIUM, Status.TODO));
-        Task t3 = new Task(3L,"Third","Third", Priority.MEDIUM , Status.IN_PROGRESS);
-        store.put(3L, t3);
-        largestID = 3L;
         return new ArrayList<>(store.values());
     }
 
