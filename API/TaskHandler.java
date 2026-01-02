@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -60,7 +61,7 @@ public class TaskHandler implements HttpHandler {
                 // Method is not one of the afformentioned
                 break;
         }
-        //Already been handled by an exception
+        //Already been handled by an exception or other method
         if(response == null) return;
 
         // Handle the request
@@ -94,8 +95,7 @@ public class TaskHandler implements HttpHandler {
         if(split.length==2){
             //See if there is a query
             String query = exchange.getRequestURI().getQuery();
-            System.out.println("Query");
-            System.out.println(query);
+            
             //No conditions, return all
             if (query == null) {
                 return new Response(200, toJson(store.findAll()), "application/json");
@@ -106,7 +106,6 @@ public class TaskHandler implements HttpHandler {
             List<String[]> conditions = new ArrayList<>();
             //Loop through all conditions
             for (int j = 0; j < params.length; j++) {
-                System.out.println(params[j]);
                 //Parse the conditions into lists of LHS, operator, RHS
                 //Check if its a valid condition on the left
                 if(params[j]=="" || params[j]==null) continue;
@@ -120,7 +119,6 @@ public class TaskHandler implements HttpHandler {
                     if(condSplit.length == 1){
                         continue;
                     } else {
-                        System.out.println("Found relational operator");
                         //if we find a valid one, we know the condition is valid(partially) and continue by checking
                         //if the LHS is valid, the validPred check
                         validCond = true;
@@ -168,7 +166,6 @@ public class TaskHandler implements HttpHandler {
                 boolean passes = true;
                 //Check against each condition
                 for (int j = 0; j < conditions.size(); j++) {
-                    System.out.println(conditions.get(j)[0]);
                     String[] condition = conditions.get(j);
                     String val = getTaskFieldValue(task, condition[0]);
                     //No need to recheck null since prechecked
@@ -190,7 +187,6 @@ public class TaskHandler implements HttpHandler {
             res = new Response(200, toJson(filteredTasks), "application/json");
             
         } else if (split.length == 3){            
-            System.out.println("Specific");
             //Getting a single task by id
             Long id = Long.parseLong(split[2]);
             Optional<Task> task = store.findById(id);
@@ -219,7 +215,6 @@ public class TaskHandler implements HttpHandler {
     }
 
     Response processPostReq(HttpExchange exchange) throws IOException{
-        System.out.println("Post request");
         Map<String,String> body = extractBodyJSONMap(exchange);
         
         if (body == null) return null;
@@ -229,9 +224,9 @@ public class TaskHandler implements HttpHandler {
             ExceptionHandler.RestException(exchange, 400);
             return null;
         }
-        //Have to -1 to ignore ID
-        for(int i = 0; i < taskAttributes.length-1;i++) {
-            if(!body.containsKey(taskAttributes[i+1])) {
+        //Have to start at 1 to ignore ID
+        for(int i = 1; i < taskAttributes.length-1;i++) {
+            if(!body.containsKey(taskAttributes[i])) {
                 System.out.println("Post request body has invalid field");
                 ExceptionHandler.RestException(exchange, 400);
                 return null;
@@ -256,22 +251,119 @@ public class TaskHandler implements HttpHandler {
         return res;
     }
     
-    Response processPutReq(HttpExchange exchange){
-        Response res = null;
+    Response processPutReq(HttpExchange exchange) throws IOException{
+        Map<String,String> body = extractBodyJSONMap(exchange);
+        if (body == null) return null;
+
+        String[] keys = body.keySet().toArray(new String[0]);
+        //Ensure all attributes that are requested to be changed 
+        //Exsist as an attribute for the tasks
+        for (int i = 0; i < keys.length; i++) {
+            boolean in = false;
+            for (int j = 1; j < taskAttributes.length;j++) {
+                if(keys[i].equals(taskAttributes[j])){
+                    in = true;
+                    break;
+                }
+            }
+            if(in == false){
+                ExceptionHandler.RestException(exchange, 400);
+                return null;
+            }
+        }
+        
+        String path = exchange.getRequestURI().getPath();
+        String[] parts = path.split("/");
+        if (parts.length != 3) {
+            ExceptionHandler.RestException(exchange, 400);
+            return null;
+        }
+        Long id;
+        try {
+            id = Long.parseLong(parts[2]);
+        } catch (NumberFormatException e) {
+            ExceptionHandler.RestException(exchange, 400);
+            return null;
+        }
+        
+        Optional<Task> taskO = store.findById(id);
+        if (!taskO.isPresent()) {
+            ExceptionHandler.RestException(exchange, 404);
+            return null;
+        }
+        Task task = taskO.get();
+
+        String newName = null;
+        String newDesc = null;
+        Status newStatus = null;
+        Priority newPriority = null;
+        //Check for each and assign values
+        if (body.containsKey("name")){
+            newName = body.get("name");
+        }
+        if (body.containsKey("description")){
+            newDesc = body.get("description");
+        }
+        if (body.containsKey("status")){
+            try{
+                newStatus = Status.valueOf(body.get("status"));
+            } catch (Exception e) {
+                ExceptionHandler.RestException(exchange, 400);
+                return null;
+            }
+        }
+        if (body.containsKey("priority")){
+            try{
+                newPriority = Priority.valueOf(body.get("priority"));
+            } catch (Exception e) {
+                ExceptionHandler.RestException(exchange, 400);
+                return null;
+            }
+        }
+        
+        task.UpdateVals(null, newName, newDesc, newStatus, newPriority);
+        Response res = new Response(200, toJson(task), "application/json");
         return res;
     }
-    Response processDelReq(HttpExchange exchange){
-        Response res = null;
-        return res;
+
+    Response processDelReq(HttpExchange exchange) throws IOException{
+        String path = exchange.getRequestURI().getPath();
+        String[] parts = path.split("/");
+
+        if (parts.length != 3) {
+            ExceptionHandler.RestException(exchange, 400);
+            return null;
+        }
+
+        long id;
+        try {
+            id = Long.parseLong(parts[2]);
+        } catch (NumberFormatException e) {
+            ExceptionHandler.RestException(exchange, 400);
+            return null;
+        }
+
+        Optional<Task> task = store.findById(id);
+        if (!task.isPresent()) {
+            ExceptionHandler.RestException(exchange, 404);
+            return null;
+        }
+
+        store.delete(id);
+
+        exchange.sendResponseHeaders(204, -1);
+        return null;
     }
 
     Map<String,String> extractBodyJSONMap(HttpExchange exchange) throws IOException{
         Headers headers = exchange.getRequestHeaders();
+        //Ensure exchange has content type header
         if(!headers.containsKey("content-type")){
             ExceptionHandler.RestException(exchange,400);
             return null;
         }
 
+        //Ensure content type is json
         if(!headers.getFirst("content-type").startsWith("application/json")){
             ExceptionHandler.RestException(exchange,415);
             return null;
