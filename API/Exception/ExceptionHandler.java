@@ -36,6 +36,8 @@ public class ExceptionHandler {
             case 405:
                 res = "Method Not Allowed";
                 break;
+            case 415:
+                res = "Unsupported Media Type";
             default:
                 break;
         }

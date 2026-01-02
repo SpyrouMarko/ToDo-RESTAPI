@@ -8,11 +8,11 @@ public class Task {
     Status status;
     Priority priority;
 
-    public Task(Long id, String name, String desc, Priority priority){
+    public Task(Long id, String name, String desc, Priority priority, Status status){
         this.id = id;
         this.name = name;
         this.desc = desc;
-        this.status = Status.TODO;
+        this.status = status;
         this.priority = priority;
     }
 
@@ -44,4 +44,6 @@ public class Task {
     public Priority getPriority(){
         return priority;
     }
+
+    
 }
